@@ -1,5 +1,6 @@
 import random
 import logging
+import asyncio
 from datetime import datetime, timezone
 import pytz
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -238,18 +239,119 @@ async def dice(update: Update, context: CallbackContext) -> None:
 
 async def cleaderboard(update: Update, context: CallbackContext) -> None:
     """Show the top 25 users by credits."""
-    # Get top 25 users by credits
-    top_users = user_collection.find().sort("credits", DESCENDING).limit(25)
+    try:
+        # Get top 25 users by credits
+        top_users = list(user_collection.find().sort("credits", DESCENDING).limit(25))
+        
+        if not top_users:
+            await update.message.reply_text("No users found in the leaderboard.")
+            return
+        
+        # Create leaderboard message
+        leaderboard = "🏆 <b>Credits Leaderboard</b>\n\n"
+        
+        for i, user in enumerate(top_users, 1):
+            user_id = user.get('user_id')
+            credits = user.get('credits', 0)
+            
+            # Try to get user name from multiple sources in order of preference
+            name = None
+            if user.get('first_name'):
+                name = user['first_name']
+            elif user.get('username'):
+                name = f"@{user['username']}"
+            elif user.get('name'):
+                name = user['name']
+            
+            # If still no name, try to fetch from Telegram (only for top users to avoid rate limits)
+            if not name and user_id and i <= 10:  # Only fetch for top 10 users
+                try:
+                    user_id_int = int(user_id)
+                    chat_member = await context.bot.get_chat(user_id_int)
+                    name = chat_member.first_name or chat_member.username or f"User{user_id_int}"
+                    
+                    # Update the database with the fresh name
+                    if name and name != f"User{user_id_int}":
+                        update_data = {}
+                        if chat_member.first_name:
+                            update_data['first_name'] = chat_member.first_name
+                        if chat_member.username:
+                            update_data['username'] = chat_member.username
+                        if update_data:
+                            user_collection.update_one(
+                                {"user_id": user_id},
+                                {"$set": update_data}
+                            )
+                    
+                    # Small delay to avoid rate limits
+                    await asyncio.sleep(0.1)
+                            
+                except Exception as e:
+                    logger.debug(f"Could not fetch user {user_id_int} from Telegram: {e}")
+                    # If we can't fetch from Telegram, use a fallback
+                    name = f"User{user_id_int}" if user_id_int else "Unknown"
+            
+            # Final fallback
+            if not name:
+                name = "Unknown"
+            
+            leaderboard += f"{i}. {name}: {credits:,} credits\n"
+        
+        await update.message.reply_text(leaderboard, parse_mode='HTML')
+        
+    except Exception as e:
+        logger.error(f"Error in cleaderboard: {e}")
+        await update.message.reply_text("Failed to retrieve the leaderboard. Please try again later.")
+
+async def refresh_names(update: Update, context: CallbackContext) -> None:
+    """Refresh user names in the database by fetching from Telegram."""
+    # Check if user is owner/admin
+    user_id = update.effective_user.id
+    if user_id != 5667016949:  # Replace with your owner ID
+        await update.message.reply_text("❌ You don't have permission to use this command.")
+        return
     
-    # Create leaderboard message
-    leaderboard = "🏆 <b>Credits Leaderboard</b>\n\n"
-    
-    for i, user in enumerate(top_users, 1):
-        name = user.get('first_name', 'Unknown')
-        credits = user.get('credits', 0)
-        leaderboard += f"{i}. {name}: {credits:,} credits\n"
-    
-    await update.message.reply_text(leaderboard, parse_mode='HTML')
+    try:
+        await update.message.reply_text("🔄 Refreshing user names from Telegram...")
+        
+        # Get all users from database
+        all_users = list(user_collection.find({}))
+        updated_count = 0
+        
+        for user in all_users:
+            user_id_str = user.get('user_id')
+            if not user_id_str:
+                continue
+                
+            try:
+                user_id_int = int(user_id_str)
+                chat_member = await context.bot.get_chat(user_id_int)
+                
+                # Update user data with fresh information
+                update_data = {}
+                if chat_member.first_name:
+                    update_data['first_name'] = chat_member.first_name
+                if chat_member.username:
+                    update_data['username'] = chat_member.username
+                if chat_member.last_name:
+                    update_data['last_name'] = chat_member.last_name
+                
+                if update_data:
+                    user_collection.update_one(
+                        {"user_id": user_id_str},
+                        {"$set": update_data}
+                    )
+                    updated_count += 1
+                    
+            except Exception as e:
+                logger.debug(f"Could not update user {user_id_str}: {e}")
+                continue
+        
+        await update.message.reply_text(f"✅ Successfully updated {updated_count} user names!")
+        
+    except Exception as e:
+        logger.error(f"Error in refresh_names: {e}")
+        await update.message.reply_text("❌ Failed to refresh user names. Please try again later.")
 
 def get_gambling_handlers():
     """Return all gambling-related command handlers."""
@@ -258,5 +360,6 @@ def get_gambling_handlers():
         CommandHandler("flip", flip),
         CommandHandler("toss", toss),
         CommandHandler("dice", dice),
-        CommandHandler("cleaderboard", cleaderboard)
+        CommandHandler("cleaderboard", cleaderboard),
+        CommandHandler("refreshnames", refresh_names)
     ] 
