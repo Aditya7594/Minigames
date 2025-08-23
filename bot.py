@@ -71,6 +71,7 @@ from cricket import (
     check_user_started_bot,
     get_user_name_cached,
     update_game_interface,
+    update_game_activity,
     game_activity
 )
 from claim import get_claim_handlers, daily
