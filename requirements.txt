@@ -1,8 +1,7 @@
 Flask==2.3.2
 gunicorn==20.1.0
 aiohttp==3.8.4
-pymongo
-pymongo[srv]==3.12.3
+pymongo[srv]
 python-telegram-bot==21.2
 python-telegram-bot[job-queue]
 Pillow

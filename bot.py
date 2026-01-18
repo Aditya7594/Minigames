@@ -29,19 +29,25 @@ def run_flask():
 flask_thread = Thread(target=run_flask)
 flask_thread.daemon = True  # Make thread daemon so it exits when main program exits
 flask_thread.start()
+
+
 import asyncio
 from pymongo import MongoClient
 import os
 import secrets
 import requests
+
 import logging
 from datetime import datetime, timedelta, timezone, time
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, CallbackContext, filters, ChatMemberHandler
 from telegram.constants import ChatType
-from token_1 import token
-from genshin_game import get_genshin_handlers, send_artifact_reward
-from multiplayer import (
+
+from utils.token_1 import token
+
+from games.genshin_game import get_genshin_handlers, send_artifact_reward
+
+from games.multiplayer import (
     get_multiplayer_handlers,
     multiplayer,
     show_current_players,
@@ -53,7 +59,8 @@ from multiplayer import (
     Mhandle_play_button,
     Mhandle_cancel_button
 )
-from cricket import (
+
+from games.cricket import (
     get_cricket_handlers,
     chat_cricket,
     cricket_games,
@@ -74,19 +81,22 @@ from cricket import (
     update_game_activity,
     game_activity
 )
-from claim import get_claim_handlers, daily
-from wordhunt import register_handlers as get_wordhunt_handlers
-from wordle import registers_handlers as get_wordle_handlers
-from Finder import get_finder_handlers
-from bank import bank, store, withdraw, add_credits, blacklist, unblacklist, auto_ban, scan_blacklist
-from mines_game import get_mines_handlers
-from hilo_game import get_hilo_handlers
-from xox_game import get_xox_handlers
-from bdice import get_bdice_handlers
-from gambling import get_gambling_handlers
-from limbo import limbo, handle_limbo_buttons
-from level_system import handle_message, get_handlers as get_level_handlers, apply_daily_tax
-from shop import (
+
+from systems.claim import get_claim_handlers, daily
+from games.wordhunt import register_handlers as get_wordhunt_handlers
+from games.wordle import registers_handlers as get_wordle_handlers
+from systems.finder import get_finder_handlers
+
+from systems.bank import bank, store, withdraw, add_credits, blacklist, unblacklist, auto_ban, scan_blacklist
+from games.mines_game import get_mines_handlers
+from games.hilo_game import get_hilo_handlers
+from games.xox_game import get_xox_handlers
+from games.bdice import get_bdice_handlers
+from games.gambling import get_gambling_handlers
+from games.limbo import limbo, handle_limbo_buttons
+
+from systems.level_system import handle_message, get_handlers as get_level_handlers, apply_daily_tax
+from systems.shop import (
     get_shop_handlers,
     shop_command,
     mycollection_command,
@@ -96,6 +106,7 @@ from shop import (
     buy_callback,
     setmain_callback
 )
+
 
 # Constants and settings
 OWNER_ID = 5667016949
@@ -914,179 +925,7 @@ async def give(update: Update, context: CallbackContext) -> None:
     except Exception as e:
         logger.error(f"Failed to notify receiver {receiver_id}: {e}")
 
-async def handle_group_message(update: Update, context: CallbackContext):
-    # logger.info("handle_group_message called")
-    user = update.effective_user
-    user_id = str(user.id)
-    chat_id = str(update.effective_chat.id)
-    
-    # Skip if message is from a bot
-    if user.is_bot:
-        logger.info(f"Skipping bot message from {user_id}")
-        return
-        
-    # Skip if message is a command
-    if update.message.text and update.message.text.startswith('/'):
-        logger.info(f"Skipping command message: {update.message.text}")
-        return
-    
-    # Determine message type
-    message_type = "text"
-    if update.message.sticker:
-        message_type = "sticker"
-    elif update.message.photo:
-        message_type = "photo"
-    elif update.message.video:
-        message_type = "video"
-    elif update.message.document:
-        message_type = "document"
-    elif update.message.audio:
-        message_type = "audio"
-    elif update.message.voice:
-        message_type = "voice"
-    elif update.message.animation:
-        message_type = "animation"
-    elif update.message.video_note:
-        message_type = "video_note"
-    elif update.message.location:
-        message_type = "location"
-    elif update.message.contact:
-        message_type = "contact"
-    elif update.message.poll:
-        message_type = "poll"
-    elif update.message.dice:
-        message_type = "dice"
-    
-    logger.info(f"Processing {message_type} message from {user_id}")
-    
-    # First handle Genshin system
-    user_data = get_genshin_user_by_id(user_id)
-    now = datetime.now(timezone.utc)
-
-    if not user_data:
-        logger.info(f"Creating new Genshin user data for {user_id}")
-        # Create new user with timezone-aware datetime
-        user_data = {
-            "user_id": user_id,
-            "primos": 16000,
-            "bag": {},
-            "message_primo": {
-                "count": 0,
-                "earned": 0,
-                "last_reset": now,
-                "last_message": now,
-                "message_types": {}
-            }
-        }
-        save_genshin_user(user_data)
-    else:
-        # Ensure message_primo exists and has timezone-aware datetime
-        if "message_primo" not in user_data:
-            logger.info(f"Initializing message_primo for {user_id}")
-            user_data["message_primo"] = {
-                "count": 0,
-                "earned": 0,
-                "last_reset": now,
-                "last_message": now,
-                "message_types": {}
-            }
-        elif user_data["message_primo"].get("last_reset") is None:
-            user_data["message_primo"]["last_reset"] = now
-            user_data["message_primo"]["last_message"] = now
-            user_data["message_primo"]["message_types"] = {}
-
-        # Convert last_reset to timezone-aware if it's not already
-        last_reset = user_data["message_primo"]["last_reset"]
-        last_message = user_data["message_primo"].get("last_message", now)
-        
-        if isinstance(last_reset, datetime) and last_reset.tzinfo is None:
-            last_reset = last_reset.replace(tzinfo=timezone.utc)
-            user_data["message_primo"]["last_reset"] = last_reset
-            
-        if isinstance(last_message, datetime) and last_message.tzinfo is None:
-            last_message = last_message.replace(tzinfo=timezone.utc)
-            user_data["message_primo"]["last_message"] = last_message
-
-        # Reset if 1 hour has passed
-        time_diff = (now - last_reset).total_seconds()
-        if time_diff > 3600:
-            logger.info(f"Resetting message count for {user_id} after {time_diff} seconds")
-            user_data["message_primo"]["count"] = 0
-            user_data["message_primo"]["earned"] = 0
-            user_data["message_primo"]["last_reset"] = now
-            user_data["message_primo"]["last_message"] = now
-            user_data["message_primo"]["message_types"] = {}
-
-        # Check for message cooldown (5 seconds)
-        message_cooldown = (now - last_message).total_seconds()
-        if message_cooldown >= 5:  # Only count messages that are at least 5 seconds apart
-            # Award primos if under limit
-            current_earned = user_data["message_primo"]["earned"]
-            if current_earned < 100:
-                user_data["message_primo"]["count"] += 1
-                user_data["message_primo"]["earned"] += 5
-                user_data["primos"] = user_data.get("primos", 0) + 5
-                user_data["message_primo"]["last_message"] = now
-                
-                # Track message types
-                if "message_types" not in user_data["message_primo"]:
-                    user_data["message_primo"]["message_types"] = {}
-                user_data["message_primo"]["message_types"][message_type] = user_data["message_primo"]["message_types"].get(message_type, 0) + 1
-                
-                logger.info(f"Awarded 5 primos to {user_id} for {message_type} message. Total primos: {user_data['primos']}")
-
-        # Save updated user data
-        save_genshin_user(user_data)
-
-        # Handle artifact system - Always enabled by default
-        settings = get_group_settings(chat_id)
-        artifact_enabled = settings.get("artifact_enabled", True)  # Default to True
-        
-        if artifact_enabled:
-            # Initialize message count tracking if not exists
-            if chat_id not in message_counts:
-                message_counts[chat_id] = {
-                    "count": 0,
-                    "last_message": now,
-                    "participants": set(),
-                    "message_types": {}
-                }
-
-            # Check for message cooldown (5 seconds)
-            if message_cooldown >= 5:
-                message_counts[chat_id]["count"] += 1
-                message_counts[chat_id]["last_message"] = now
-                message_counts[chat_id]["participants"].add(user_id)
-                
-                # Track message types
-                message_counts[chat_id]["message_types"][message_type] = message_counts[chat_id]["message_types"].get(message_type, 0) + 1
-                
-                # Clean up old participants (older than 1 hour)
-                current_participants = message_counts[chat_id]["participants"]
-                message_counts[chat_id]["participants"] = {
-                    pid for pid in current_participants 
-                    if (now - user_data.get("message_primo", {}).get("last_message", now)).total_seconds() < 3600
-                }
-
-                # Get threshold from settings (default 50)
-                threshold = settings.get("artifact_threshold", 50)
-                current_count = message_counts[chat_id]["count"]
-                
-                logger.info(f"Artifact progress for chat {chat_id}: {current_count}/{threshold}")
-                
-                # Check if threshold reached
-                if current_count >= threshold:
-                    # Reset counter and send artifact
-                    message_counts[chat_id]["count"] = 0
-                    logger.info(f"🎉 Artifact threshold reached for chat {chat_id} ({threshold} messages), sending artifact reward!")
-                    await send_artifact_reward(chat_id, context)
-                    
-                    # Log the reset
-                    logger.info(f"Artifact counter reset for chat {chat_id}, next artifact in {threshold} messages")
-    
-    # Then handle leveling system
-    logger.info("Calling handle_message for leveling system")
-    await handle_message(update, context)
+    # Function removed: handle_group_message logic is now split between games/genshin_game.py and systems/level_system.py
     logger.info("handle_group_message completed")
 
 async def handle_watch_button(update: Update, context: CallbackContext) -> None:
@@ -1234,6 +1073,7 @@ async def chat_command(update: Update, context: CallbackContext) -> None:
     asyncio.create_task(delete_later())
 
 def main() -> None:
+    
     # Create the Application
     application = Application.builder().token(token).build()
 
@@ -1319,8 +1159,6 @@ def main() -> None:
         get_cricket_handlers(),
         get_genshin_handlers(),
         get_gambling_handlers(),
-        get_wordhunt_handlers(application),  # WordHunt handlers
-        get_wordle_handlers(application),    # Wordle handlers
         get_finder_handlers(application),
         get_shop_handlers(),  # Add shop handlers
     ]
@@ -1328,12 +1166,19 @@ def main() -> None:
     for handlers in modules_to_register:
         for handler in handlers:
             application.add_handler(handler)
+
+    # Add WordHunt and Wordle
+    for handler in get_wordhunt_handlers(application):
+        application.add_handler(handler)
     
-    # Update message handler to handle all message types in groups
+    for handler in get_wordle_handlers(application):
+        application.add_handler(handler)
+    
+    # Add level system message handler (runs in parallel with game handlers)
     application.add_handler(MessageHandler(
         filters.ChatType.GROUPS & filters.ALL & ~filters.COMMAND,
-        handle_group_message
-    ))
+        handle_message
+    ), group=1)
 
     # Add level system handlers
     for command, handler in get_level_handlers():
