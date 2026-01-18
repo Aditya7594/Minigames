@@ -604,31 +604,51 @@ async def broadcast(update: Update, context: CallbackContext) -> None:
     successful_groups = 0
     failed_groups = 0
     
+    # Stats for report
+    count_normal = 0
+    count_genshin = 0
+    
     try:
         # Send to users if requested
         if target in ["users", "all"]:
-            # Fetch all users from the database
-            users = list(user_collection.find({}, {"user_id": 1}))
-            total_users = len(users)
+            # Fetch normal users
+            normal_users_cursor = user_collection.find({}, {"user_id": 1})
+            normal_user_ids = set()
+            for u in normal_users_cursor:
+                if "user_id" in u:
+                    normal_user_ids.add(str(u["user_id"]))
+            
+            # Fetch genshin users
+            genshin_users_cursor = genshin_collection.find({}, {"user_id": 1})
+            genshin_user_ids = set()
+            for u in genshin_users_cursor:
+                if "user_id" in u:
+                    genshin_user_ids.add(str(u["user_id"]))
+            
+            count_normal = len(normal_user_ids)
+            count_genshin = len(genshin_user_ids)
+            
+            # Combine unique IDs
+            all_user_ids = list(normal_user_ids.union(genshin_user_ids))
+            total_users = len(all_user_ids)
             
             if total_users == 0:
-                await progress_msg.edit_text("❌ No users found in the database.")
+                await progress_msg.edit_text("❌ No users found in any database.")
                 return
             
             current_count = 0
-            for user in users:
+            for user_id in all_user_ids:
                 try:
-                    user_id = int(user.get("user_id"))  # Convert to integer
                     # Add a small delay to avoid hitting rate limits
                     await asyncio.sleep(0.05)
                     await context.bot.send_message(
-                        chat_id=user_id, 
+                        chat_id=int(user_id), 
                         text=f"📢 <b>Broadcast Message</b>\n\n{broadcast_message}",
                         parse_mode="HTML"
                     )
                     successful_users += 1
                 except Exception as e:
-                    logger.error(f"Failed to send broadcast to user {user.get('user_id')}: {e}")
+                    logger.error(f"Failed to send broadcast to user {user_id}: {e}")
                     failed_users += 1
                 
                 current_count += 1
@@ -649,45 +669,44 @@ async def broadcast(update: Update, context: CallbackContext) -> None:
             groups = list(groups_collection.find({}, {"group_id": 1}))
             total_groups = len(groups)
             
-            if total_groups == 0:
-                await progress_msg.edit_text("❌ No groups found in the database.")
-                return
-            
-            current_count = 0
-            for group in groups:
-                try:
-                    group_id = int(group.get("group_id"))  # Convert to integer
-                    # Add a small delay to avoid hitting rate limits
-                    await asyncio.sleep(0.05)
-                    await context.bot.send_message(
-                        chat_id=group_id, 
-                        text=f"📢 <b>Broadcast Message</b>\n\n{broadcast_message}",
-                        parse_mode="HTML"
-                    )
-                    successful_groups += 1
-                except Exception as e:
-                    logger.error(f"Failed to send broadcast to group {group.get('group_id')}: {e}")
-                    failed_groups += 1
-                
-                current_count += 1
-                if current_count % 5 == 0:  # Update progress more frequently
+            if total_groups == 0 and target == "groups":
+                 await progress_msg.edit_text("❌ No groups found in the database.")
+            elif total_groups > 0:
+                current_count = 0
+                for group in groups:
                     try:
-                        await progress_msg.edit_text(
-                            f"🔄 Broadcasting to groups...\n"
-                            f"Progress: {current_count}/{total_groups}\n"
-                            f"✅ Success: {successful_groups}\n"
-                            f"❌ Failed: {failed_groups}"
+                        group_id = int(group.get("group_id"))  # Convert to integer
+                        # Add a small delay to avoid hitting rate limits
+                        await asyncio.sleep(0.05)
+                        await context.bot.send_message(
+                            chat_id=group_id, 
+                            text=f"📢 <b>Broadcast Message</b>\n\n{broadcast_message}",
+                            parse_mode="HTML"
                         )
+                        successful_groups += 1
                     except Exception as e:
-                        logger.error(f"Failed to update progress message: {e}")
+                        logger.error(f"Failed to send broadcast to group {group.get('group_id')}: {e}")
+                        failed_groups += 1
+                    
+                    current_count += 1
+                    if current_count % 5 == 0:  # Update progress more frequently
+                        try:
+                            await progress_msg.edit_text(
+                                f"🔄 Broadcasting to groups...\n"
+                                f"Progress: {current_count}/{total_groups}\n"
+                                f"✅ Success: {successful_groups}\n"
+                                f"❌ Failed: {failed_groups}"
+                            )
+                        except Exception as e:
+                            logger.error(f"Failed to update progress message: {e}")
         
         # Send final report
         report_message = (
             "📊 <b>Broadcast Report</b>\n\n"
-            f"✅ Successfully sent to {successful_users} users and {successful_groups} groups.\n"
-            f"❌ Failed to send to {failed_users} users and {failed_groups} groups.\n\n"
-            f"Total recipients: {successful_users + successful_groups}\n"
-            f"Total failures: {failed_users + failed_groups}"
+            f"📢 <b>Groups Reached:</b> {successful_groups} (Failed: {failed_groups})\n"
+            f"👤 <b>Normal Users in DB:</b> {count_normal}\n"
+            f"🌠 <b>Genshin Users in DB:</b> {count_genshin}\n"
+            f"📨 <b>Unique Users Reached:</b> {successful_users} (Failed: {failed_users})\n"
         )
         
         await progress_msg.edit_text(report_message, parse_mode="HTML")
