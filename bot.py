@@ -714,7 +714,75 @@ async def broadcast(update: Update, context: CallbackContext) -> None:
     except Exception as e:
         error_message = f"❌ An error occurred during broadcasting: {str(e)}"
         logger.error(error_message)
+        await progress_msg.edit_text(report_message, parse_mode="HTML")
+        
+    except Exception as e:
+        error_message = f"❌ An error occurred during broadcasting: {str(e)}"
+        logger.error(error_message)
         await progress_msg.edit_text(error_message)
+
+async def get_group_links(update: Update, context: CallbackContext) -> None:
+    """Get invite links for all groups where the bot is an admin (Owner only)."""
+    user_id = update.effective_user.id
+    if user_id != OWNER_ID:
+        await update.message.reply_text("🔒 You don't have permission to use this command.")
+        return
+
+    progress_msg = await update.message.reply_text("🔄 Fetching group links...")
+    
+    groups = list(groups_collection.find({}, {"group_id": 1, "title": 1}))
+    total_groups = len(groups)
+    
+    if total_groups == 0:
+        await progress_msg.edit_text("❌ No groups found in database.")
+        return
+
+    links = []
+    failed_count = 0
+    
+    for group in groups:
+        try:
+            group_id = int(group.get("group_id"))
+            group_title = group.get("title", "Unknown Group")
+            
+            # Check bot's member status
+            member = await context.bot.get_chat_member(group_id, context.bot.id)
+            if member.status in ["administrator", "creator"]:
+                # Try to export invite link
+                try:
+                    invite_link = await context.bot.export_chat_invite_link(group_id)
+                    links.append(f"• <b>{group_title}</b>: {invite_link}")
+                except Exception as e:
+                    logger.warning(f"Failed to export link for group {group_id}: {e}")
+                    failed_count += 1
+            else:
+                failed_count += 1 # Not admin
+                
+        except Exception as e:
+            logger.error(f"Error processing group {group.get('group_id')}: {e}")
+            failed_count += 1
+            
+        # Rate limit protection
+        await asyncio.sleep(0.1)
+
+    if not links:
+        await progress_msg.edit_text(f"❌ Could not retrieve any links. Bot might not be admin in any groups.\nChecked {total_groups} groups.")
+        return
+
+    # Send links in chunks to avoid message length limits
+    header = f"📋 <b>Group Invite Links ({len(links)}/{total_groups})</b>\n\n"
+    message_chunk = header
+    
+    for link in links:
+        if len(message_chunk) + len(link) > 4000:
+            await context.bot.send_message(chat_id=user_id, text=message_chunk, parse_mode="HTML")
+            message_chunk = ""
+        message_chunk += link + "\n"
+        
+    if message_chunk:
+        await context.bot.send_message(chat_id=user_id, text=message_chunk, parse_mode="HTML")
+        
+    await progress_msg.edit_text("✅ Links sent!")
 
 async def set_artifact_threshold(update: Update, context: CallbackContext) -> None:
     """Set the artifact drop threshold for a group (Admin only)."""
@@ -1137,6 +1205,7 @@ def main() -> None:
         ("artifactstatus", artifact_status),
         ("artifacts", global_artifact_status),
         ("artifacthelp", artifact_help),
+        ("grouplinks", get_group_links),
     ]
     
     for command, handler in command_handlers:
