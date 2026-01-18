@@ -714,11 +714,6 @@ async def broadcast(update: Update, context: CallbackContext) -> None:
     except Exception as e:
         error_message = f"❌ An error occurred during broadcasting: {str(e)}"
         logger.error(error_message)
-        await progress_msg.edit_text(report_message, parse_mode="HTML")
-        
-    except Exception as e:
-        error_message = f"❌ An error occurred during broadcasting: {str(e)}"
-        logger.error(error_message)
         await progress_msg.edit_text(error_message)
 
 async def get_group_links(update: Update, context: CallbackContext) -> None:
