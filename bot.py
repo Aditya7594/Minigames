@@ -553,9 +553,9 @@ async def broadcast(update: Update, context: CallbackContext) -> None:
 
     # Add message deduplication
     message_id = update.message.message_id
-    if hasattr(context.bot_data, 'last_broadcast_id') and context.bot_data.last_broadcast_id == message_id:
+    if context.bot_data.get('last_broadcast_id') == message_id:
         return
-    context.bot_data.last_broadcast_id = message_id
+    context.bot_data['last_broadcast_id'] = message_id
 
     # Check if a message is provided
     if not context.args:
@@ -607,6 +607,18 @@ async def broadcast(update: Update, context: CallbackContext) -> None:
     # Stats for report
     count_normal = 0
     count_genshin = 0
+
+    async def send_message_safe(chat_id, text):
+        try:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                parse_mode="HTML"
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to send broadcast to {chat_id}: {e}")
+            return False
     
     try:
         # Send to users if requested
@@ -636,32 +648,34 @@ async def broadcast(update: Update, context: CallbackContext) -> None:
                 await progress_msg.edit_text("❌ No users found in any database.")
                 return
             
-            current_count = 0
-            for user_id in all_user_ids:
-                try:
-                    # Add a small delay to avoid hitting rate limits
-                    await asyncio.sleep(0.05)
-                    await context.bot.send_message(
-                        chat_id=int(user_id), 
-                        text=f"📢 <b>Broadcast Message</b>\n\n{broadcast_message}",
-                        parse_mode="HTML"
-                    )
-                    successful_users += 1
-                except Exception as e:
-                    logger.error(f"Failed to send broadcast to user {user_id}: {e}")
-                    failed_users += 1
+            # Process in batches
+            BATCH_SIZE = 25
+            for i in range(0, total_users, BATCH_SIZE):
+                batch = all_user_ids[i:i + BATCH_SIZE]
+                tasks = []
+                for user_id in batch:
+                    tasks.append(send_message_safe(int(user_id), f"📢 <b>Broadcast Message</b>\n\n{broadcast_message}"))
                 
-                current_count += 1
-                if current_count % 10 == 0:  # Update progress more frequently
-                    try:
-                        await progress_msg.edit_text(
-                            f"🔄 Broadcasting to users...\n"
-                            f"Progress: {current_count}/{total_users}\n"
-                            f"✅ Success: {successful_users}\n"
-                            f"❌ Failed: {failed_users}"
-                        )
-                    except Exception as e:
-                        logger.error(f"Failed to update progress message: {e}")
+                results = await asyncio.gather(*tasks)
+                
+                # Update counters
+                success_count = sum(1 for r in results if r)
+                successful_users += success_count
+                failed_users += (len(batch) - success_count)
+                
+                # Update progress every batch
+                try:
+                    await progress_msg.edit_text(
+                        f"🔄 Broadcasting to users...\n"
+                        f"Progress: {min(i + BATCH_SIZE, total_users)}/{total_users}\n"
+                        f"✅ Success: {successful_users}\n"
+                        f"❌ Failed: {failed_users}"
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to update progress message: {e}")
+                
+                # Small delay between batches to respect rate limits (30 req/sec)
+                await asyncio.sleep(1.0)
         
         # Send to groups if requested
         if target in ["groups", "all"]:
@@ -672,33 +686,33 @@ async def broadcast(update: Update, context: CallbackContext) -> None:
             if total_groups == 0 and target == "groups":
                  await progress_msg.edit_text("❌ No groups found in the database.")
             elif total_groups > 0:
-                current_count = 0
-                for group in groups:
+                # Process groups in batches
+                BATCH_SIZE = 25
+                for i in range(0, total_groups, BATCH_SIZE):
+                    batch = groups[i:i + BATCH_SIZE]
+                    tasks = []
+                    for group in batch:
+                         tasks.append(send_message_safe(int(group.get("group_id")), f"📢 <b>Broadcast Message</b>\n\n{broadcast_message}"))
+
+                    results = await asyncio.gather(*tasks)
+
+                    # Update counters
+                    success_count = sum(1 for r in results if r)
+                    successful_groups += success_count
+                    failed_groups += (len(batch) - success_count)
+
                     try:
-                        group_id = int(group.get("group_id"))  # Convert to integer
-                        # Add a small delay to avoid hitting rate limits
-                        await asyncio.sleep(0.05)
-                        await context.bot.send_message(
-                            chat_id=group_id, 
-                            text=f"📢 <b>Broadcast Message</b>\n\n{broadcast_message}",
-                            parse_mode="HTML"
+                        await progress_msg.edit_text(
+                            f"🔄 Broadcasting to groups...\n"
+                            f"Progress: {min(i + BATCH_SIZE, total_groups)}/{total_groups}\n"
+                            f"✅ Success: {successful_groups}\n"
+                            f"❌ Failed: {failed_groups}"
                         )
-                        successful_groups += 1
                     except Exception as e:
-                        logger.error(f"Failed to send broadcast to group {group.get('group_id')}: {e}")
-                        failed_groups += 1
-                    
-                    current_count += 1
-                    if current_count % 5 == 0:  # Update progress more frequently
-                        try:
-                            await progress_msg.edit_text(
-                                f"🔄 Broadcasting to groups...\n"
-                                f"Progress: {current_count}/{total_groups}\n"
-                                f"✅ Success: {successful_groups}\n"
-                                f"❌ Failed: {failed_groups}"
-                            )
-                        except Exception as e:
-                            logger.error(f"Failed to update progress message: {e}")
+                        logger.error(f"Failed to update progress message: {e}")
+
+                    # Small delay between batches
+                    await asyncio.sleep(1.0)
         
         # Send final report
         report_message = (
