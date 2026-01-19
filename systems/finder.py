@@ -896,6 +896,7 @@ def get_finder_handlers(application: Application) -> list:
         entry_points=[CommandHandler("finder", start)],
         states={PLAYING: [CallbackQueryHandler(button_handler)]},
         fallbacks=[CommandHandler("finder", start)],
+        per_message=True
     )
     
     handlers = [
