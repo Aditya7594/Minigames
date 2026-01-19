@@ -334,7 +334,7 @@ def register_handlers(application: Application) -> list:
         CommandHandler("whleaderboard", whleaderboard),
         CommandHandler("whglobal", whglobal),
         MessageHandler(
-            filters.TEXT & ~filters.COMMAND & ~filters.ChatType.PRIVATE & active_wordhunt_filter,
+            filters.TEXT & ~filters.COMMAND & ~filters.ChatType.PRIVATE,
             handle_guess,
             block=False
         )
