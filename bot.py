@@ -2,10 +2,6 @@ from flask import Flask, request, Response
 from threading import Thread
 import os
 
-# Setup NLTK data before importing game modules
-from nltk_setup import setup_nltk
-setup_nltk()
-
 # Create Flask app
 app = Flask(__name__)
 
@@ -51,18 +47,7 @@ from utils.token_1 import token
 
 from games.genshin_game import get_genshin_handlers, send_artifact_reward
 
-from games.multiplayer import (
-    get_multiplayer_handlers,
-    multiplayer,
-    show_current_players,
-    extend_time,
-    stop_game,
-    list_players,
-    MButton_join,
-    Mhandle_remove_button,
-    Mhandle_play_button,
-    Mhandle_cancel_button
-)
+
 
 from games.cricket import (
     get_cricket_handlers,
@@ -95,11 +80,11 @@ from systems.bank import bank, store, withdraw, add_credits, blacklist, unblackl
 from games.mines_game import get_mines_handlers
 from games.hilo_game import get_hilo_handlers
 from games.xox_game import get_xox_handlers
-from games.bdice import get_bdice_handlers
+
 from games.gambling import get_gambling_handlers
 from games.limbo import limbo, handle_limbo_buttons
 
-from systems.level_system import handle_message, get_handlers as get_level_handlers, apply_daily_tax
+
 from systems.shop import (
     get_shop_handlers,
     shop_command,
@@ -1233,10 +1218,6 @@ def main() -> None:
         ("^join_", handle_join_button),
         ("^watch_", handle_watch_button),
         ("^(take|next)_", handle_limbo_buttons),
-        ("^Mjoin_.*$", MButton_join),
-        ("^Mremove_.*$", Mhandle_remove_button),
-        ("^Mplay_.*$", Mhandle_play_button),
-        ("^Mcancel_.*$", Mhandle_cancel_button),
         ("^buy_", buy_callback),
         ("^setmain_", setmain_callback),
         ("^category_", category_navigation_callback),
@@ -1251,9 +1232,7 @@ def main() -> None:
     
     # Add module handlers
     modules_to_register = [
-        get_multiplayer_handlers(),
         get_claim_handlers(),
-        get_bdice_handlers(),
         get_mines_handlers(),
         get_hilo_handlers(),
         get_xox_handlers(),
@@ -1275,20 +1254,6 @@ def main() -> None:
     for handler in get_wordle_handlers(application):
         application.add_handler(handler)
     
-    # Add level system message handler (runs in parallel with game handlers)
-    application.add_handler(MessageHandler(
-        filters.ChatType.GROUPS & filters.ALL & ~filters.COMMAND,
-        handle_message
-    ), group=1)
-
-    # Add level system handlers
-    for command, handler in get_level_handlers():
-        application.add_handler(CommandHandler(command, handler))
-
-    # Schedule daily tax
-    job_queue = application.job_queue
-    job_queue.run_daily(apply_daily_tax, time=time(hour=0, minute=0))
-
     application.add_error_handler(error_handler)
     
     # Start the bot in polling mode
