@@ -1,43 +1,9 @@
-from flask import Flask, request, Response
-from threading import Thread
-import os
-
-# Create Flask app
-app = Flask(__name__)
-
-@app.route('/')
-def hello_world():
-    return Response('Bot is running!', status=200)
-
-@app.route('/health')
-def health_check():
-    return Response('OK', status=200)
-
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    """Handle webhook requests from Telegram"""
-    if request.method == "POST":
-        return Response(status=200)
-    return Response(status=400)
-
-# Function to run Flask
-def run_flask():
-    # Force port to 8000 for health checks
-    app.run(host="0.0.0.0", port=8000)
-
-# Start Flask server in background thread
-flask_thread = Thread(target=run_flask)
-flask_thread.daemon = True  # Make thread daemon so it exits when main program exits
-flask_thread.start()
-
-
+import logging
 import asyncio
 from pymongo import MongoClient
 import os
 import secrets
 import requests
-
-import logging
 from datetime import datetime, timedelta, timezone, time
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, CallbackContext, filters, ChatMemberHandler
@@ -1268,10 +1234,20 @@ def main() -> None:
 
     application.add_error_handler(error_handler)
     
-    # Start the bot in polling mode - explicitly allow all update types
-    logger.info("Starting bot in polling mode...")
-    application.run_polling(
-        allowed_updates=["message", "callback_query", "chat_member", "my_chat_member"]
+    # Webhook Mode for Production (Koyeb)
+    PORT = int(os.environ.get("PORT", 8000))
+    # Ensure URL doesn't have trailing slash
+    BASE_URL = os.environ.get("KOYEB_APP_URL", "https://tg-bot-aditya7594-526955a1.koyeb.app").rstrip("/")
+    
+    logger.info(f"Starting bot in WEBHOOK mode on port {PORT}...")
+    
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        url_path=token,
+        webhook_url=f"{BASE_URL}/{token}",
+        allowed_updates=["message", "callback_query", "chat_member", "my_chat_member", "channel_post"],
+        drop_pending_updates=True
     )
 
 if __name__ == '__main__':

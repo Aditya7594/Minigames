@@ -132,6 +132,11 @@ class WordHuntGame:
             self.ongoing_game = True
             self.last_activity_time = asyncio.get_event_loop().time()
             
+            # Schedule activity check using JobQueue
+            # First cancel any existing jobs
+            # Note: We need the context here, but start() is a method of WordHuntGame. 
+            # We'll expect the caller (wordhunt function) to handle the initial job scheduling.
+            
             # Keep generating letter rows until we have enough valid words
             attempt_count = 0
             while len(self.score_words) < 35 and attempt_count < 10:
@@ -280,10 +285,10 @@ async def end_hunt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_html(final_results)
     wordhunt_games[chat_id].end_clear()
 
-    global activity_timers
-    if chat_id in activity_timers:
-        activity_timers[chat_id].cancel()
-        del activity_timers[chat_id]
+    # Cancel existing timeout job if any
+    current_jobs = context.job_queue.get_jobs_by_name(f"wordhunt_timeout_{chat_id}")
+    for job in current_jobs:
+        job.schedule_removal()
 
 async def whleaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Display WordHunt leaderboard for current group"""
@@ -324,6 +329,7 @@ class ActiveWordHuntFilter(filters.MessageFilter):
         chat_id = message.chat_id
         return chat_id in wordhunt_games and wordhunt_games[chat_id].ongoing_game
 
+
 active_wordhunt_filter = ActiveWordHuntFilter()
 
 def register_handlers(application: Application) -> list:
@@ -334,7 +340,7 @@ def register_handlers(application: Application) -> list:
         CommandHandler("whleaderboard", whleaderboard),
         CommandHandler("whglobal", whglobal),
         MessageHandler(
-            filters.ChatType.GROUPS & filters.TEXT & ~filters.COMMAND,
+            active_wordhunt_filter & filters.TEXT & ~filters.COMMAND,
             handle_guess,
             block=False
         )

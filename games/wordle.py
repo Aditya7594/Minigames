@@ -222,7 +222,7 @@ def registers_handlers(application: Application) -> list:
         CommandHandler("wordglobal", wordglobal),
         CommandHandler("endwordle", end_wordle),
         MessageHandler(
-            filters.ChatType.GROUPS & filters.TEXT & ~filters.COMMAND,
+            active_wordle_filter & filters.TEXT & ~filters.COMMAND,
             handle_guess,
             block=False
         )
