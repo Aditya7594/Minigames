@@ -3,10 +3,9 @@ from __future__ import annotations
 import os
 import random
 import asyncio
+import json
 from collections import defaultdict
 from typing import Dict, Any
-import nltk
-from nltk.corpus import words
 
 from telegram import Update
 from telegram.ext import (
@@ -15,22 +14,20 @@ from telegram.ext import (
 )
 from utils.db import wordhunt_scores_collection
 
-# Download nltk word corpus if not already present
-try:
-    nltk.data.find('corpora/words')
-except LookupError:
-    nltk.download('words')
-
 # DB Alias
 wh_scores = wordhunt_scores_collection
 
 # Game constants
 MAX_TRIALS = 25
 
-# Load word list from nltk - LIMITED to shorter words for performance
-_all_words = [word.upper() for word in words.words() if len(word) >= 3 and len(word) <= 8 and word.isalpha()]
-# Limit to 20,000 most common-length words for CPU efficiency
-wordhunt_word_list = _all_words[:20000]
+# Load word list from JSON (faster than NLTK)
+try:
+    with open(os.path.join(os.path.dirname(__file__), '..', 'data', 'word_lists.json'), 'r') as f:
+        _word_data = json.load(f)
+        wordhunt_word_list = _word_data.get('wordhunt', [])
+except FileNotFoundError:
+    # Fallback to empty list if JSON not found
+    wordhunt_word_list = []
 
 # Game state storage
 wordhunt_games = {}

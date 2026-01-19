@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import os
 import random
-import nltk
-from nltk.corpus import words
+import json
 from collections import Counter
 from typing import Sequence, Optional, Dict, Any
 
@@ -14,12 +13,6 @@ from telegram.ext import (
 )
 from utils.db import wordle_scores_collection
 
-# Download nltk word corpus if not already present
-try:
-    nltk.data.find('corpora/words')
-except LookupError:
-    nltk.download('words')
-
 # DB Alias
 wordle_col = wordle_scores_collection
 
@@ -28,8 +21,15 @@ ABSENT, PRESENT, CORRECT = 0, 1, 2
 BLOCKS = {0: "🟥", 1: "🟨", 2: "🟩"}
 MAX_TRIALS = 30  # Standard Wordle is 6 trials, updated to 30
 
-# Load word lists from NLTK
-WORD_LIST = [word.upper() for word in words.words() if len(word) == 5 and word.isalpha()]
+# Load word lists from JSON (faster than NLTK)
+try:
+    with open(os.path.join(os.path.dirname(__file__), '..', 'data', 'word_lists.json'), 'r') as f:
+        _word_data = json.load(f)
+        WORD_LIST = _word_data.get('wordle', [])
+except FileNotFoundError:
+    # Fallback to empty list if JSON not found
+    WORD_LIST = []
+
 CRICKET_TERMS = ["stump", "pitch", "creas", "bails", "sweep", "drive", "hook", "pull", 
                 "cover", "point", "midon", "midof", "slips", "gully", "third", "fine", 
                 "short", "long", "deep", "silly", "york", "bounc", "googl", "doosr",
