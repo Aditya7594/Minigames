@@ -24,20 +24,19 @@ wh_scores = wordhunt_scores_collection
 # Game constants
 MAX_TRIALS = 25
 
-# Load word list from JSON (faster than NLTK)
+# Load word list from text file (using existing word_list.txt)
+wordhunt_word_list = []
 try:
-    json_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'word_lists.json')
-    logger.info(f"Loading WordHunt word list from: {json_path}")
-    with open(json_path, 'r') as f:
-        _word_data = json.load(f)
-        wordhunt_word_list = _word_data.get('wordhunt', [])
-        logger.info(f"WordHunt word list loaded: {len(wordhunt_word_list)} words")
+    txt_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'word_list.txt')
+    logger.info(f"Loading WordHunt word list from: {txt_path}")
+    with open(txt_path, 'r') as f:
+        # Filter for 3-10 letter words for WordHunt
+        wordhunt_word_list = [line.strip().upper() for line in f if 3 <= len(line.strip()) <= 10 and line.strip().isalpha()]
+    logger.info(f"WordHunt word list loaded: {len(wordhunt_word_list)} words")
 except FileNotFoundError as e:
-    logger.error(f"Word list JSON not found: {e}")
-    wordhunt_word_list = []
+    logger.error(f"Word list not found: {e}")
 except Exception as e:
     logger.error(f"Error loading word list: {e}")
-    wordhunt_word_list = []
 
 # Game state storage
 wordhunt_games = {}
