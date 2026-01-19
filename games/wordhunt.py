@@ -4,6 +4,7 @@ import os
 import random
 import asyncio
 import json
+import logging
 from collections import defaultdict
 from typing import Dict, Any
 
@@ -14,6 +15,9 @@ from telegram.ext import (
 )
 from utils.db import wordhunt_scores_collection
 
+# Setup logging
+logger = logging.getLogger(__name__)
+
 # DB Alias
 wh_scores = wordhunt_scores_collection
 
@@ -22,11 +26,17 @@ MAX_TRIALS = 25
 
 # Load word list from JSON (faster than NLTK)
 try:
-    with open(os.path.join(os.path.dirname(__file__), '..', 'data', 'word_lists.json'), 'r') as f:
+    json_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'word_lists.json')
+    logger.info(f"Loading WordHunt word list from: {json_path}")
+    with open(json_path, 'r') as f:
         _word_data = json.load(f)
         wordhunt_word_list = _word_data.get('wordhunt', [])
-except FileNotFoundError:
-    # Fallback to empty list if JSON not found
+        logger.info(f"WordHunt word list loaded: {len(wordhunt_word_list)} words")
+except FileNotFoundError as e:
+    logger.error(f"Word list JSON not found: {e}")
+    wordhunt_word_list = []
+except Exception as e:
+    logger.error(f"Error loading word list: {e}")
     wordhunt_word_list = []
 
 # Game state storage

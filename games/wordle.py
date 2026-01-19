@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import random
 import json
+import logging
 from collections import Counter
 from typing import Sequence, Optional, Dict, Any
 
@@ -12,6 +13,9 @@ from telegram.ext import (
     filters
 )
 from utils.db import wordle_scores_collection
+
+# Setup logging
+logger = logging.getLogger(__name__)
 
 # DB Alias
 wordle_col = wordle_scores_collection
@@ -23,11 +27,17 @@ MAX_TRIALS = 30  # Standard Wordle is 6 trials, updated to 30
 
 # Load word lists from JSON (faster than NLTK)
 try:
-    with open(os.path.join(os.path.dirname(__file__), '..', 'data', 'word_lists.json'), 'r') as f:
+    json_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'word_lists.json')
+    logger.info(f"Loading Wordle word list from: {json_path}")
+    with open(json_path, 'r') as f:
         _word_data = json.load(f)
         WORD_LIST = _word_data.get('wordle', [])
-except FileNotFoundError:
-    # Fallback to empty list if JSON not found
+        logger.info(f"Wordle word list loaded: {len(WORD_LIST)} words")
+except FileNotFoundError as e:
+    logger.error(f"Word list JSON not found: {e}")
+    WORD_LIST = []
+except Exception as e:
+    logger.error(f"Error loading word list: {e}")
     WORD_LIST = []
 
 CRICKET_TERMS = ["stump", "pitch", "creas", "bails", "sweep", "drive", "hook", "pull", 
