@@ -839,6 +839,7 @@ def get_genshin_handlers():
         CallbackQueryHandler(button),
         MessageHandler(
             filters.ChatType.GROUPS & filters.ALL & ~filters.COMMAND,
-            handle_genshin_group_message
+            handle_genshin_group_message,
+            block=False
         )
     ]
