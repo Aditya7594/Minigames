@@ -25,14 +25,14 @@ ABSENT, PRESENT, CORRECT = 0, 1, 2
 BLOCKS = {0: "🟥", 1: "🟨", 2: "🟩"}
 MAX_TRIALS = 30  # Standard Wordle is 6 trials, updated to 30
 
-# Load word lists from text file (using existing word_list.txt)
+# Load word lists from JSON
 WORD_LIST = []
 try:
-    txt_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'word_list.txt')
-    logger.info(f"Loading Wordle word list from: {txt_path}")
-    with open(txt_path, 'r') as f:
-        # Filter for 5-letter words for Wordle
-        WORD_LIST = [line.strip().upper() for line in f if len(line.strip()) == 5 and line.strip().isalpha()]
+    json_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'word_lists.json')
+    logger.info(f"Loading Wordle word list from: {json_path}")
+    with open(json_path, 'r') as f:
+        _word_data = json.load(f)
+        WORD_LIST = _word_data.get('wordle', [])
     logger.info(f"Wordle word list loaded: {len(WORD_LIST)} words")
 except FileNotFoundError as e:
     logger.error(f"Word list not found: {e}")
