@@ -1268,9 +1268,11 @@ def main() -> None:
 
     application.add_error_handler(error_handler)
     
-    # Start the bot in polling mode
+    # Start the bot in polling mode - explicitly allow all update types
     logger.info("Starting bot in polling mode...")
-    application.run_polling()
+    application.run_polling(
+        allowed_updates=["message", "callback_query", "chat_member", "my_chat_member"]
+    )
 
 if __name__ == '__main__':
     main()
