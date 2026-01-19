@@ -27,8 +27,10 @@ wh_scores = wordhunt_scores_collection
 # Game constants
 MAX_TRIALS = 25
 
-# Load word list from nltk
-wordhunt_word_list = [word.upper() for word in words.words() if len(word) >= 3 and word.isalpha()]
+# Load word list from nltk - LIMITED to shorter words for performance
+_all_words = [word.upper() for word in words.words() if len(word) >= 3 and len(word) <= 8 and word.isalpha()]
+# Limit to 20,000 most common-length words for CPU efficiency
+wordhunt_word_list = _all_words[:20000]
 
 # Game state storage
 wordhunt_games = {}
@@ -82,8 +84,10 @@ class WordHuntGame:
         letter_counts = defaultdict(int)
         for letter in self.letter_row:
             letter_counts[letter.lower()] += 1
-            
-        for word in self.line_list:
+        
+        # Process in chunks to avoid blocking
+        chunk_size = 1000
+        for i, word in enumerate(self.line_list):
             word_lower = word.lower()
             temp_counts = letter_counts.copy()
             valid = True
@@ -96,6 +100,10 @@ class WordHuntGame:
                 
             if valid:
                 self.score_words.append(word)
+            
+            # Yield control every chunk_size words to prevent CPU blocking
+            if i % chunk_size == 0:
+                await asyncio.sleep(0)
 
     def can_spell(self, word):
         """Check if a word can be spelled with the current letters"""
