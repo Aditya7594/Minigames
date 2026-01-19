@@ -2,6 +2,10 @@ from flask import Flask, request, Response
 from threading import Thread
 import os
 
+# Setup NLTK data before importing game modules
+from nltk_setup import setup_nltk
+setup_nltk()
+
 # Create Flask app
 app = Flask(__name__)
 
