@@ -132,7 +132,9 @@ async def cricketwordle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def handle_guess(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
+    logger.info(f"Wordle handle_guess called for chat {chat_id}, message: {update.message.text}")
     if chat_id not in wordle_games:
+        logger.info(f"No active Wordle game in chat {chat_id}")
         return
 
     game = wordle_games[chat_id]

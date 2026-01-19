@@ -73,54 +73,46 @@ async def update_user_level(user_id: int, chat_id: int, messages: int) -> tuple[
     return old_level, new_level
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle messages for leveling system."""
+    """Handle messages for leveling system - OPTIMIZED."""
     if not update.message or update.message.chat.type not in ['group', 'supergroup']:
         return
     
     user_id = update.message.from_user.id
     chat_id = update.message.chat.id
     
-    # Initialize message count for this chat if not exists
-    if chat_id not in message_counts:
-        message_counts[chat_id] = {}
+    # Single upsert operation - increment messages and get updated doc
+    user_data = chat_levels_collection.find_one_and_update(
+        {'user_id': user_id, 'chat_id': chat_id},
+        {
+            '$inc': {'messages': 1},
+            '$setOnInsert': {'level': 1, 'last_level_up': datetime.now(timezone.utc)}
+        },
+        upsert=True,
+        return_document=True  # Return the updated document
+    )
     
-    # Increment message count for user
-    if user_id not in message_counts[chat_id]:
-        message_counts[chat_id][user_id] = 0
-    message_counts[chat_id][user_id] += 1
-
-    # Update message count in the database every message
-    user_data = chat_levels_collection.find_one({'user_id': user_id, 'chat_id': chat_id})
-    if not user_data:
-        user_data = {
-            'user_id': user_id,
-            'chat_id': chat_id,
-            'level': 1,
-            'messages': 1,
-            'last_level_up': datetime.now(timezone.utc)
-        }
-        chat_levels_collection.insert_one(user_data)
-    else:
+    total_messages = user_data.get('messages', 1)
+    old_level = user_data.get('level', 1)
+    
+    # Calculate new level based on messages
+    new_level = old_level
+    for level, required_messages in LEVEL_REWARDS.items():
+        if total_messages >= required_messages:
+            new_level = max(new_level, int(level))
+    
+    # Only update if level changed
+    if new_level > old_level:
         chat_levels_collection.update_one(
             {'user_id': user_id, 'chat_id': chat_id},
-            {'$inc': {'messages': 1}}
+            {'$set': {'level': new_level, 'last_level_up': datetime.now(timezone.utc)}}
         )
-
-    # Get total messages and update level
-    total_messages = await get_user_messages(user_id, chat_id) + 1
-    old_level, new_level = await update_user_level(user_id, chat_id, total_messages)
-    
-    # If user leveled up, send congratulations message
-    if new_level > old_level:
-        reward = new_level * 10000  # 10k credits per level (increased from 1k)
-        user_data = user_collection.find_one({'user_id': user_id})
-        if not user_data:
-            user_data = {'user_id': user_id, 'credits': 0}
-            user_collection.insert_one(user_data)
         
+        # Give reward
+        reward = new_level * 10000
         user_collection.update_one(
             {'user_id': user_id},
-            {'$inc': {'credits': reward}}
+            {'$inc': {'credits': reward}},
+            upsert=True
         )
         
         await update.message.reply_text(
