@@ -83,7 +83,8 @@ from games.xox_game import get_xox_handlers
 
 from games.gambling import get_gambling_handlers
 from games.limbo import limbo, handle_limbo_buttons
-
+from games.bdice import get_bdice_handlers
+from systems.level_system import handle_message, get_handlers as get_level_handlers, apply_daily_tax
 
 from systems.shop import (
     get_shop_handlers,
@@ -1228,6 +1229,7 @@ def main() -> None:
     # Add module handlers
     modules_to_register = [
         get_claim_handlers(),
+        get_bdice_handlers(),
         get_mines_handlers(),
         get_hilo_handlers(),
         get_xox_handlers(),
@@ -1249,6 +1251,20 @@ def main() -> None:
     for handler in get_wordle_handlers(application):
         application.add_handler(handler)
     
+    # Add level system message handler (runs in parallel with game handlers)
+    application.add_handler(MessageHandler(
+        filters.ChatType.GROUPS & filters.ALL & ~filters.COMMAND,
+        handle_message
+    ), group=1)
+
+    # Add level system handlers
+    for command, handler in get_level_handlers():
+        application.add_handler(CommandHandler(command, handler))
+
+    # Schedule daily tax
+    job_queue = application.job_queue
+    job_queue.run_daily(apply_daily_tax, time=time(hour=0, minute=0))
+
     application.add_error_handler(error_handler)
     
     # Start the bot in polling mode
