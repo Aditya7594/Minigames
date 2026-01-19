@@ -1254,7 +1254,8 @@ def main() -> None:
     # Add level system message handler (runs in parallel with game handlers)
     application.add_handler(MessageHandler(
         filters.ChatType.GROUPS & filters.ALL & ~filters.COMMAND,
-        handle_message
+        handle_message,
+        block=False
     ), group=1)
 
     # Add level system handlers
